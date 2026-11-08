@@ -1,30 +1,32 @@
 # BidNet - Real-Time Distributed Auction System
 
-## Project Description
+BidNet is a university Network Programming project that connects multiple clients
+to a central Java server over TCP.
 
-BidNet is a university Network Programming project focused on real-time communication between multiple clients and a central Java server.
+## Current development stage
 
-## Current Development Stage
+The server supports in-memory auctions, connection-bound bidder identities,
+JOIN_AUCTION and PLACE_BID messages, atomic bid validation, and versioned live
+updates to subscribers. The standard server creates auction `demo` at `1000.00`.
 
-The repository implements initial TCP communication between a Java server and multiple console clients. Auction functionality is planned for later issues.
-See [the protocol and run instructions](docs/protocol.md) to start the server, run clients, and verify the tests.
+The console client currently supports ECHO diagnostics only. Live console auction
+commands are tracked in issue #5; auction expiry and final closure are tracked in
+issue #7. Restarting the server resets in-memory auction state.
 
-## Core Technologies
+See [protocol and run instructions](docs/protocol.md) and
+[auction engine rules](docs/auction-engine.md).
 
-- Java 21
-- Maven
-- TCP Socket Programming
-- Jackson
+## Technologies
+
+- Java 21 and Maven
+- TCP sockets and virtual threads
+- Per-auction locking and immutable snapshots
+- Jackson JSON
 - JUnit 5
-- Git/GitHub
+- GitHub Actions on Windows and macOS
 
-## Future Networking Focus
+## Verify
 
-Later stages will explore:
-
-- Multithreading
-- Synchronization
-- Race-condition handling
-- Real-time broadcasting
-- Heartbeat and reconnection
-- Fault handling
+```text
+mvn --batch-mode --no-transfer-progress verify
+```

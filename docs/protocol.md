@@ -108,17 +108,24 @@ Install JDK 21 and Maven, then run from the repository root.
 mvn compile exec:java "-Dexec.mainClass=com.bidnet.server.BidNetServer" "-Dexec.args=5051"
 ```
 
-The existing console entry point still supports ECHO only (auction commands and
-independent live receiving are Risapan's issue #5). To test that diagnostic:
+In a separate terminal, start each console client:
 
 ```text
 mvn exec:java "-Dexec.mainClass=com.bidnet.client.ConsoleClient" "-Dexec.args=127.0.0.1 5051"
 ```
 
-Enter ordinary text; quit disconnects. That baseline client's five-second response
-timeout is suitable for ECHO, not idle auction subscriptions. Sending JSON as text
-in that client echoes it; it does not issue auction commands. Use the socket
-integration tests below to verify auctions until issue #5 is integrated.
+| Command | Effect |
+| --- | --- |
+| `join <auctionId>` | Join an auction and show its current state |
+| `bid <amount>` | Bid on the auction joined most recently |
+| `echo <text>` | Test the connection |
+| `help` | List the commands |
+| `quit` | Disconnect and exit |
+
+The client has one background socket reader and no read timeout, so updates appear
+while it waits for keyboard input. It ignores snapshots older than the newest
+version it has seen, and it exits if the connection ends. It has no heartbeat, so
+it may not notice a silently lost network path until it next sends a command.
 
 Choose a free port and use the same port on server and clients. On multiple
 computers, use the server's reachable LAN address and allow the port through its

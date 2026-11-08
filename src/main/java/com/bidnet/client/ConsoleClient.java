@@ -36,7 +36,8 @@ public final class ConsoleClient {
     private final PrintStream out;
     private final CompletableFuture<Integer> finished = new CompletableFuture<>();
     private Writer server;
-    private String currentAuction;
+    /** Written by the socket reader once the server confirms a join; read by the keyboard thread. */
+    private volatile String currentAuction;
 
     private ConsoleClient(PrintStream out) {
         this.out = out;
@@ -96,7 +97,7 @@ public final class ConsoleClient {
     }
 
     private void receive(BufferedReader frames) {
-        AuctionDisplay display = new AuctionDisplay(out);
+        AuctionDisplay display = new AuctionDisplay(out, auctionId -> currentAuction = auctionId);
         try {
             String line;
             while ((line = frames.readLine()) != null) {
@@ -170,21 +171,21 @@ public final class ConsoleClient {
             out.println("Usage: join <auctionId>");
             return;
         }
-        currentAuction = auctionId;
         ObjectNode request = frame("JOIN_AUCTION");
         request.with("payload").put("auctionId", auctionId);
         send(request);
     }
 
     private void bid(String amount) throws IOException {
+        String auctionId = currentAuction;
         if (amount.isEmpty() || amount.chars().anyMatch(Character::isWhitespace)) {
             out.println("Usage: bid <amount>");
-        } else if (currentAuction == null) {
+        } else if (auctionId == null) {
             out.println("Join an auction first: join <auctionId>");
         } else {
             // The amount stays a string: the server alone validates money.
             ObjectNode request = frame("PLACE_BID");
-            request.with("payload").put("auctionId", currentAuction).put("amount", amount);
+            request.with("payload").put("auctionId", auctionId).put("amount", amount);
             send(request);
         }
     }

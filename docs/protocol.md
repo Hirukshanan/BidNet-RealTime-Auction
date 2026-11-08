@@ -122,6 +122,10 @@ mvn exec:java "-Dexec.mainClass=com.bidnet.client.ConsoleClient" "-Dexec.args=12
 | `help` | List the commands |
 | `quit` | Disconnect and exit |
 
+The client changes its current auction only when the server confirms a join with
+AUCTION_STATE. A failed join leaves it unchanged, and a bid typed before the
+confirmation arrives still targets the previous auction.
+
 The client has one background socket reader and no read timeout, so updates appear
 while it waits for keyboard input. It ignores snapshots older than the newest
 version it has seen, and it exits if the connection ends. It has no heartbeat, so

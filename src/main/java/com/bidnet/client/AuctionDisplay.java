@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Turns server frames into console output, dispatching only on the frame type.
@@ -16,10 +17,13 @@ final class AuctionDisplay {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<String, JsonNode> latest = new HashMap<>();
     private final PrintStream out;
+    private final Consumer<String> onJoined;
     private String bidderId;
 
-    AuctionDisplay(PrintStream out) {
+    /** Calls {@code onJoined} with the auction ID each time the server confirms a join. */
+    AuctionDisplay(PrintStream out, Consumer<String> onJoined) {
         this.out = out;
+        this.onJoined = onJoined;
     }
 
     void handle(String line) {
@@ -55,8 +59,11 @@ final class AuctionDisplay {
             return;
         }
         remember(snapshot);
-        out.println("Joined auction " + snapshot.get("auctionId").textValue() + " as " + bidderId);
-        out.println(describe(latest.get(snapshot.get("auctionId").textValue())));
+        String auctionId = snapshot.get("auctionId").textValue();
+        // Before printing, so a bid typed after seeing this line targets the joined auction.
+        onJoined.accept(auctionId);
+        out.println("Joined auction " + auctionId + " as " + bidderId);
+        out.println(describe(latest.get(auctionId)));
     }
 
     private void showUpdate(JsonNode payload) {

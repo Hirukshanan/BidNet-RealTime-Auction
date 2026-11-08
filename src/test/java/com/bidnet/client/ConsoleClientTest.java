@@ -96,6 +96,88 @@ class ConsoleClientTest {
     }
 
     @Test
+    void failedJoinKeepsTheCurrentAuctionForBidding() throws Exception {
+        try (Client client = new Client(server.getPort())) {
+            client.type("join camera");
+            client.awaitOutput("Joined auction camera");
+
+            client.type("join camra");
+            client.awaitOutput("Server error: AUCTION_NOT_FOUND");
+
+            client.type("bid 1100.00");
+            client.awaitOutput("Bid accepted.");
+            client.awaitOutput("[camera] OPEN | price 1100.00");
+            assertFalse(client.output().contains("NOT_JOINED"), client.output());
+        }
+    }
+
+    @Test
+    void failedFirstJoinLeavesNoAuctionToBidOn() throws Exception {
+        try (Client client = new Client(server.getPort())) {
+            client.type("join missing");
+            client.awaitOutput("Server error: AUCTION_NOT_FOUND");
+
+            client.type("bid 1000.00");
+            client.awaitOutput("Join an auction first");
+        }
+    }
+
+    @Test
+    void bidsFollowTheLatestConfirmedJoin() throws Exception {
+        try (ScriptedServer fake = new ScriptedServer(); Client client = new Client(fake.port())) {
+            fake.accept();
+            client.type("join camera");
+            assertEquals(joinFrame("camera"), fake.readLine());
+
+            // An update is not a join confirmation, even for the requested auction.
+            fake.sendRaw(update(snapshot("OPEN", "1000.00", "1000.00", null, 0)) + "\n");
+            client.awaitOutput("Update: [camera] OPEN");
+            client.type("bid 1000.00");
+            client.awaitOutput("Join an auction first");
+
+            fake.sendRaw(state("you-id", snapshot("OPEN", "1000.00", "1000.00", null, 0)) + "\n");
+            client.awaitOutput("Joined auction camera");
+            client.type("bid 1000.00");
+            assertEquals(bidFrame("camera", "1000.00"), fake.readLine());
+
+            // A pending or failed join does not move bids away from the confirmed auction.
+            client.type("join vase");
+            assertEquals(joinFrame("vase"), fake.readLine());
+            client.type("bid 1050.00");
+            assertEquals(bidFrame("camera", "1050.00"), fake.readLine());
+            fake.sendRaw("{\"type\":\"ERROR\",\"payload\":{\"reason\":\"AUCTION_NOT_FOUND\"}}\n");
+            client.awaitOutput("Server error: AUCTION_NOT_FOUND");
+            client.type("bid 1102.50");
+            assertEquals(bidFrame("camera", "1102.50"), fake.readLine());
+
+            fake.sendRaw("{\"type\":\"AUCTION_STATE\",\"payload\":{\"bidderId\":\"you-id\",\"snapshot\":"
+                    + "{\"auctionId\":\"vase\",\"status\":\"OPEN\",\"version\":0}}}\n");
+            client.awaitOutput("Joined auction vase");
+            client.type("bid 20.00");
+            assertEquals(bidFrame("vase", "20.00"), fake.readLine());
+
+            // Rejoining counts even though its snapshot version is not newer. The reader
+            // handles frames in order, so seeing the echo means the join was processed.
+            fake.sendRaw(state("you-id", snapshot("OPEN", "1000.00", "1000.00", null, 0)) + "\n"
+                    + "{\"type\":\"ECHO_RESPONSE\",\"payload\":{\"message\":\"rejoined\"}}\n");
+            client.awaitOutput("rejoined");
+            client.type("bid 1000.00");
+            assertEquals(bidFrame("camera", "1000.00"), fake.readLine());
+        }
+    }
+
+    @Test
+    void malformedJoinConfirmationDoesNotChangeTheCurrentAuction() throws Exception {
+        try (ScriptedServer fake = new ScriptedServer(); Client client = new Client(fake.port())) {
+            fake.accept();
+            fake.sendRaw("{\"type\":\"AUCTION_STATE\",\"payload\":{\"snapshot\":{\"auctionId\":\"camera\"}}}\n");
+            client.awaitOutput("Ignored a malformed auction snapshot.");
+            client.type("bid 1000.00");
+            client.awaitOutput("Join an auction first");
+        }
+    }
+
+    @Test
     void preservesUnicodeAndQuotes() throws Exception {
         String text = "வணக்கம் \"hello\" \\ goodbye";
         try (Client client = new Client(server.getPort())) {
@@ -220,10 +302,21 @@ class ConsoleClientTest {
             fake.accept();
             client.type("join camera \"1\"");
             assertEquals("{\"type\":\"JOIN_AUCTION\",\"payload\":{\"auctionId\":\"camera \\\"1\\\"\"}}", fake.readLine());
+            fake.sendRaw("{\"type\":\"AUCTION_STATE\",\"payload\":{\"bidderId\":\"you-id\",\"snapshot\":"
+                    + "{\"auctionId\":\"camera \\\"1\\\"\",\"status\":\"OPEN\",\"version\":0}}}\n");
+            client.awaitOutput("Joined auction camera \"1\"");
             client.type("bid 1050.00");
             assertEquals("{\"type\":\"PLACE_BID\",\"payload\":{\"auctionId\":\"camera \\\"1\\\"\",\"amount\":\"1050.00\"}}",
                     fake.readLine());
         }
+    }
+
+    private static String joinFrame(String auctionId) {
+        return "{\"type\":\"JOIN_AUCTION\",\"payload\":{\"auctionId\":\"" + auctionId + "\"}}";
+    }
+
+    private static String bidFrame(String auctionId, String amount) {
+        return "{\"type\":\"PLACE_BID\",\"payload\":{\"auctionId\":\"" + auctionId + "\",\"amount\":\"" + amount + "\"}}";
     }
 
     private static int count(String text, String part) {

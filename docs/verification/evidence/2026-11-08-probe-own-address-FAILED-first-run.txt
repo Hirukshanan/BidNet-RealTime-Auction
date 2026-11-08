@@ -1,0 +1,12 @@
+== C1 join and current state
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << (no AUCTION_STATE within 3000 ms)
+FAIL client-A joined at 1000.00, version 0 | observed: currentPrice=null version=null
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << (no AUCTION_STATE within 3000 ms)
+FAIL client-B joined at 1000.00, version 0 | observed: currentPrice=null version=null
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << (no AUCTION_STATE within 3000 ms)
+FAIL client-C joined at 1000.00, version 0 | observed: currentPrice=null version=null
+Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.equals(Object)" because "<local3>.bidderId" is null
+	at SocketProbe.main(SocketProbe.java:147)

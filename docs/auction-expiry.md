@@ -24,7 +24,8 @@ both paths use the auction lock, exactly one of competing bid and scheduler
 callers can own that transition. Serialize and broadcast the returned immutable
 snapshot after the engine method returns, never while the auction lock is held.
 
-The server scheduler should keep one cancellable task per auction. Server
-shutdown must cancel those tasks and close its scheduler/executor. That lifecycle
-wiring belongs to the server integration layer; the domain engine neither owns
-threads nor performs network I/O.
+The server scheduler keeps a scheduled task for each in-memory auction. Its
+callback rechecks the authoritative clock under the engine lock, so an early
+callback cannot close an auction early. Server shutdown cancels pending work and
+shuts down the scheduler. The domain engine itself still owns no threads and
+performs no network I/O.

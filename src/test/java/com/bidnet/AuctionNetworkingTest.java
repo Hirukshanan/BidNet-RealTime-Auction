@@ -14,6 +14,8 @@ import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
@@ -31,8 +33,9 @@ class AuctionNetworkingTest {
     @BeforeEach
     void start() throws IOException {
         AuctionEngine engine = new AuctionEngine();
-        engine.createAuction("camera", new BigDecimal("1000.00"));
-        engine.createAuction("painting", new BigDecimal("10.01"));
+        Instant deadline = Instant.now().plus(Duration.ofHours(1));
+        engine.createAuction("camera", new BigDecimal("1000.00"), deadline);
+        engine.createAuction("painting", new BigDecimal("10.01"), deadline);
         server = new BidNetServer(0, engine);
         serverThread = Thread.startVirtualThread(() -> {
             try {

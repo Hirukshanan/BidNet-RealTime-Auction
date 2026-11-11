@@ -6,13 +6,14 @@ BidNet is a university Network Programming project focused on real-time communic
 
 ## Current Development Stage
 
-The repository is currently at the foundation and setup stage. Auction functionality and networking have not yet been implemented.
+The repository implements initial TCP communication between a Java server and multiple console clients. Auction functionality is planned for later issues.
+See [the protocol and run instructions](docs/protocol.md) to start the server, run clients, and verify the tests.
 
 ## Core Technologies
 
 - Java 21
 - Maven
-- TCP Socket Programming (future implementation)
+- TCP Socket Programming
 - Jackson
 - JUnit 5
 - Git/GitHub
@@ -21,9 +22,6 @@ The repository is currently at the foundation and setup stage. Auction functiona
 
 Later stages will explore:
 
-- TCP socket communication
-- Client-server architecture
-- Concurrent clients
 - Multithreading
 - Synchronization
 - Race-condition handling

@@ -284,6 +284,18 @@ class ConsoleClientTest {
         }
     }
 
+    /** The expiry feature (#7) announces closure with AUCTION_ENDED instead of AUCTION_UPDATE. */
+    @Test
+    void showsFinalStateFromAuctionEndedAnnouncement() throws Exception {
+        try (ScriptedServer fake = new ScriptedServer(); Client client = new Client(fake.port())) {
+            fake.accept();
+            fake.sendRaw(state("you-id", snapshot("OPEN", "1000.00", "1050.00", "you-id", 1)) + "\n"
+                    + ended(snapshot("CLOSED", "1000.00", "1050.00", "you-id", 2)) + "\n");
+            client.awaitOutput("Update: [camera] CLOSED | final price 1000.00 | winner you | version 2");
+            assertFalse(client.output().contains("unsupported"), client.output());
+        }
+    }
+
     /** The baseline client gave up after five seconds; this must outlast that on purpose. */
     @Test
     void receivesUpdatesAfterAnIdlePeriodLongerThanTheOldTimeout() throws Exception {
@@ -331,6 +343,10 @@ class ConsoleClientTest {
 
     private static String update(String snapshot) {
         return "{\"type\":\"AUCTION_UPDATE\",\"payload\":{\"snapshot\":" + snapshot + "}}";
+    }
+
+    private static String ended(String snapshot) {
+        return "{\"type\":\"AUCTION_ENDED\",\"payload\":{\"snapshot\":" + snapshot + "}}";
     }
 
     private static String state(String bidderId, String snapshot) {

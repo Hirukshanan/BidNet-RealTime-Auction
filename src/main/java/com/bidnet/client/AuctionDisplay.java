@@ -41,7 +41,7 @@ final class AuctionDisplay {
         JsonNode payload = frame.get("payload");
         switch (frame.get("type").textValue()) {
             case "AUCTION_STATE" -> showJoined(payload);
-            case "AUCTION_UPDATE" -> showUpdate(payload);
+            case "AUCTION_UPDATE", "AUCTION_ENDED" -> showUpdate(payload);
             case "BID_RESULT" -> showBidResult(payload);
             case "ECHO_RESPONSE" -> out.println("Server: " + line);
             case "ERROR" -> out.println("Server error: " + payload.path("reason").asText("UNKNOWN"));

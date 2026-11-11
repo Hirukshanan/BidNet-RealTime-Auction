@@ -172,7 +172,7 @@ public final class ConsoleClient {
             return;
         }
         ObjectNode request = frame("JOIN_AUCTION");
-        request.with("payload").put("auctionId", auctionId);
+        request.withObjectProperty("payload").put("auctionId", auctionId);
         send(request);
     }
 
@@ -185,7 +185,7 @@ public final class ConsoleClient {
         } else {
             // The amount stays a string: the server alone validates money.
             ObjectNode request = frame("PLACE_BID");
-            request.with("payload").put("auctionId", auctionId).put("amount", amount);
+            request.withObjectProperty("payload").put("auctionId", auctionId).put("amount", amount);
             send(request);
         }
     }
@@ -196,7 +196,7 @@ public final class ConsoleClient {
             return;
         }
         ObjectNode request = frame("ECHO");
-        request.with("payload").put("message", text);
+        request.withObjectProperty("payload").put("message", text);
         send(request);
     }
 

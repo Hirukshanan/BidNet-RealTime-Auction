@@ -62,7 +62,7 @@ final class AuctionDisplay {
         String auctionId = snapshot.get("auctionId").textValue();
         // Before printing, so a bid typed after seeing this line targets the joined auction.
         onJoined.accept(auctionId);
-        out.println("Joined auction " + auctionId + " as " + bidderId);
+        out.println("Joined auction " + auctionId + (bidderId == null ? "" : " as " + bidderId));
         out.println(describe(latest.get(auctionId)));
     }
 

@@ -284,6 +284,19 @@ class ConsoleClientTest {
         }
     }
 
+    @Test
+    void joinWithoutABidderIdDoesNotPrintNull() throws Exception {
+        try (ScriptedServer fake = new ScriptedServer(); Client client = new Client(fake.port())) {
+            fake.accept();
+            fake.sendRaw("{\"type\":\"AUCTION_STATE\",\"payload\":{\"snapshot\":"
+                    + snapshot("OPEN", "1000.00", "1000.00", null, 0) + "}}\n");
+            client.awaitOutput("[camera] OPEN");
+            assertTrue(client.output().contains("Joined auction camera\n")
+                    || client.output().contains("Joined auction camera" + System.lineSeparator()), client.output());
+            assertFalse(client.output().contains("null"), client.output());
+        }
+    }
+
     /** The expiry feature (#7) announces closure with AUCTION_ENDED instead of AUCTION_UPDATE. */
     @Test
     void showsFinalStateFromAuctionEndedAnnouncement() throws Exception {

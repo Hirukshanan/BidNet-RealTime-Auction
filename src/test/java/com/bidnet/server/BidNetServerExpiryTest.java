@@ -16,6 +16,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,19 +54,21 @@ class BidNetServerExpiryTest {
 
     @Test
     void scheduledCallbackAnnouncesFinalNoBidSnapshotExactlyOnce() throws Exception {
-        startServer("no-bids");
+        ControlledScheduler scheduler = new ControlledScheduler();
+        startServer("no-bids", scheduler);
+        assertEquals(1, scheduler.pendingTasks());
         try (Peer peer = new Peer()) {
             peer.join("no-bids");
             clock.set(DEADLINE);
 
-            server.expireAuction("no-bids");
+            scheduler.runNext();
             JsonNode ended = peer.read("AUCTION_ENDED").path("snapshot");
             assertEquals("CLOSED", ended.path("status").asText());
             assertEquals(1, ended.path("version").asLong());
             assertTrue(ended.path("highestBidderId").isNull());
             assertEquals(DEADLINE.toString(), ended.path("deadline").asText());
 
-            server.expireAuction("no-bids");
+            assertEquals(0, scheduler.pendingTasks());
             peer.send("ECHO", "{}");
             peer.read("ECHO_RESPONSE");
         }
@@ -106,8 +117,14 @@ class BidNetServerExpiryTest {
     }
 
     private void startServer(String auctionId) throws IOException {
+        startServer(auctionId, null);
+    }
+
+    private void startServer(String auctionId, ControlledScheduler scheduler) throws IOException {
         engine.createAuction(auctionId, new BigDecimal("1000.00"), DEADLINE);
-        server = new BidNetServer(0, engine, clock);
+        server = scheduler == null
+                ? new BidNetServer(0, engine, clock)
+                : new BidNetServer(0, engine, clock, scheduler);
         serverThread = Thread.startVirtualThread(() -> {
             try {
                 server.start();
@@ -115,6 +132,117 @@ class BidNetServerExpiryTest {
                 serverFailure.set(problem);
             }
         });
+    }
+
+    private static final class ControlledScheduler extends AbstractExecutorService
+            implements ScheduledExecutorService {
+        private final Queue<Runnable> tasks = new ArrayDeque<>();
+        private boolean shutdown;
+
+        int pendingTasks() {
+            return tasks.size();
+        }
+
+        void runNext() {
+            Runnable task = tasks.remove();
+            task.run();
+        }
+
+        @Override
+        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            if (shutdown) {
+                throw new java.util.concurrent.RejectedExecutionException();
+            }
+            tasks.add(command);
+            return new PendingTask(delay, unit);
+        }
+
+        @Override
+        public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleAtFixedRate(
+                Runnable command, long initialDelay, long period, TimeUnit unit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleWithFixedDelay(
+                Runnable command, long initialDelay, long delay, TimeUnit unit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            List<Runnable> pending = List.copyOf(tasks);
+            tasks.clear();
+            return pending;
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown && tasks.isEmpty();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return isTerminated();
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            throw new UnsupportedOperationException();
+        }
+
+        private record PendingTask(long delay, TimeUnit unit) implements ScheduledFuture<Object> {
+            @Override
+            public long getDelay(TimeUnit requestedUnit) {
+                return requestedUnit.convert(delay, unit);
+            }
+
+            @Override
+            public int compareTo(Delayed other) {
+                return Long.compare(getDelay(TimeUnit.NANOSECONDS), other.getDelay(TimeUnit.NANOSECONDS));
+            }
+
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                return false;
+            }
+
+            @Override
+            public boolean isCancelled() {
+                return false;
+            }
+
+            @Override
+            public boolean isDone() {
+                return false;
+            }
+
+            @Override
+            public Object get() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Object get(long timeout, TimeUnit unit) {
+                throw new UnsupportedOperationException();
+            }
+        }
     }
 
     private final class Peer implements AutoCloseable {

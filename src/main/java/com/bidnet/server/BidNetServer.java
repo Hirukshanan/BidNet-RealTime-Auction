@@ -334,7 +334,7 @@ public final class BidNetServer implements AutoCloseable {
     }
 
     public static void main(String[] args) throws IOException {
-        int port = args.length > 0 ? Integer.parseInt(args[0]) : 5000;
+        int port = args.length > 0 ? Integer.parseInt(args[0]) : 5051;
         try (BidNetServer server = new BidNetServer(port)) {
             System.out.println("BidNet server listening on port " + server.getPort());
             System.out.println("Demo auction: demo (starting price 1000.00)");

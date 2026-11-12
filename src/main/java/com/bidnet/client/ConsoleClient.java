@@ -47,7 +47,7 @@ public final class ConsoleClient {
         String host = args.length > 0 ? args[0] : "127.0.0.1";
         int port;
         try {
-            port = args.length > 1 ? Integer.parseInt(args[1]) : 5000;
+            port = args.length > 1 ? Integer.parseInt(args[1]) : 5051;
         } catch (NumberFormatException invalid) {
             System.err.println("Usage: ConsoleClient [host] [port]");
             System.exit(EXIT_USAGE);

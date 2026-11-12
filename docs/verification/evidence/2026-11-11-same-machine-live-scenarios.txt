@@ -1,0 +1,160 @@
+# Same-machine live run of issue #8 scenarios 1-11
+# Date: 2026-11-11. macOS 27.2 arm64, OpenJDK 21.0.13, Maven 3.9.16.
+# Code: local integration branch verify/8-integration (7e5fa34) = origin/main + PR #11 + PR #12 + PR #13 + two fixes.
+# One real BidNetServer process (DemoLauncher, short deadline) and three real ConsoleClient processes over TCP 127.0.0.1:5051.
+# Bidder UUIDs shortened to their last 12 hex digits. NOT a LAN check.
+
+   0.00s STEP   | ======== SESSION 1: server with 40s deadline
+   0.10s SERVER | READY port=5051 deadlineIn=40s
+   2.67s A      | Connected to 127.0.0.1:5051
+   2.67s A      | Type help for commands.
+   2.67s C      | Connected to 127.0.0.1:5051
+   2.67s C      | Type help for commands.
+   2.68s B      | Connected to 127.0.0.1:5051
+   2.68s B      | Type help for commands.
+   4.52s STEP   | ======== 1 all three join demo
+   4.52s A      | >>> join demo
+   4.58s A      | Joined auction demo as …ea2d1fd4c75e
+   4.59s A      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+   5.32s B      | >>> join demo
+   5.36s B      | Joined auction demo as …a82bdf05f377
+   5.37s B      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+   6.13s C      | >>> join demo
+   6.17s C      | Joined auction demo as …f6daf66888d7
+   6.17s C      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+   6.93s STEP   | ======== 2 A bids 999.99 (expect BID_TOO_LOW, B/C see nothing)
+   6.93s A      | >>> bid 999.99
+   6.94s A      | Bid rejected: BID_TOO_LOW
+   6.94s A      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+   7.73s STEP   | ======== 3 A bids 1000.00 (expect accepted, all update, min 1050.00)
+   7.73s A      | >>> bid 1000.00
+   7.74s A      | Bid accepted.
+   7.74s A      | [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader you | version 1
+   7.74s C      | Update: [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader …ea2d1fd4c75e | version 1
+   7.74s B      | Update: [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader …ea2d1fd4c75e | version 1
+   8.54s STEP   | ======== 4 B bids 1049.99 (expect BID_TOO_LOW)
+   8.54s B      | >>> bid 1049.99
+   8.54s B      | Bid rejected: BID_TOO_LOW
+   8.54s B      | [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader …ea2d1fd4c75e | version 1
+   9.34s STEP   | ======== 5 B bids 1050.00 (expect accepted, min 1102.50)
+   9.34s B      | >>> bid 1050.00
+   9.35s B      | Bid accepted.
+   9.35s B      | [demo] OPEN | price 1050.00 | minimum next bid 1102.50 | leader you | version 2
+   9.35s C      | Update: [demo] OPEN | price 1050.00 | minimum next bid 1102.50 | leader …a82bdf05f377 | version 2
+   9.35s A      | Update: [demo] OPEN | price 1050.00 | minimum next bid 1102.50 | leader …a82bdf05f377 | version 2
+  10.14s STEP   | ======== 6 simultaneous equal bids, 5 rounds
+  10.14s STEP   | round 1: all bid 1102.50
+  10.14s A      | >>> bid 1102.50
+  10.14s B      | >>> bid 1102.50
+  10.14s C      | >>> bid 1102.50
+  10.15s B      | Bid rejected: BID_TOO_LOW
+  10.15s B      | [demo] OPEN | price 1102.50 | minimum next bid 1157.63 | leader …ea2d1fd4c75e | version 3
+  10.15s A      | Bid accepted.
+  10.15s A      | [demo] OPEN | price 1102.50 | minimum next bid 1157.63 | leader you | version 3
+  10.15s C      | Update: [demo] OPEN | price 1102.50 | minimum next bid 1157.63 | leader …ea2d1fd4c75e | version 3
+  10.15s C      | Bid rejected: BID_TOO_LOW
+  10.15s C      | [demo] OPEN | price 1102.50 | minimum next bid 1157.63 | leader …ea2d1fd4c75e | version 3
+  11.15s STEP   | round 2: all bid 1157.63
+  11.15s A      | >>> bid 1157.63
+  11.15s B      | >>> bid 1157.63
+  11.15s C      | >>> bid 1157.63
+  11.15s C      | Bid rejected: BID_TOO_LOW
+  11.15s B      | Bid rejected: BID_TOO_LOW
+  11.15s C      | [demo] OPEN | price 1157.63 | minimum next bid 1215.52 | leader …ea2d1fd4c75e | version 4
+  11.15s A      | Bid accepted.
+  11.15s B      | [demo] OPEN | price 1157.63 | minimum next bid 1215.52 | leader …ea2d1fd4c75e | version 4
+  11.15s A      | [demo] OPEN | price 1157.63 | minimum next bid 1215.52 | leader you | version 4
+  12.15s STEP   | round 3: all bid 1215.52
+  12.15s A      | >>> bid 1215.52
+  12.15s B      | >>> bid 1215.52
+  12.15s C      | >>> bid 1215.52
+  12.16s A      | Bid rejected: BID_TOO_LOW
+  12.16s A      | [demo] OPEN | price 1215.52 | minimum next bid 1276.30 | leader …a82bdf05f377 | version 5
+  12.16s B      | Bid accepted.
+  12.16s B      | [demo] OPEN | price 1215.52 | minimum next bid 1276.30 | leader you | version 5
+  12.16s C      | Bid rejected: BID_TOO_LOW
+  12.16s C      | [demo] OPEN | price 1215.52 | minimum next bid 1276.30 | leader …a82bdf05f377 | version 5
+  13.16s STEP   | round 4: all bid 1276.30
+  13.16s A      | >>> bid 1276.30
+  13.16s B      | >>> bid 1276.30
+  13.16s C      | >>> bid 1276.30
+  13.16s B      | Bid accepted.
+  13.16s B      | [demo] OPEN | price 1276.30 | minimum next bid 1340.12 | leader you | version 6
+  13.16s A      | Bid rejected: BID_TOO_LOW
+  13.16s A      | [demo] OPEN | price 1276.30 | minimum next bid 1340.12 | leader …a82bdf05f377 | version 6
+  13.16s C      | Bid rejected: BID_TOO_LOW
+  13.16s C      | [demo] OPEN | price 1276.30 | minimum next bid 1340.12 | leader …a82bdf05f377 | version 6
+  14.16s STEP   | round 5: all bid 1340.12
+  14.16s A      | >>> bid 1340.12
+  14.16s B      | >>> bid 1340.12
+  14.16s C      | >>> bid 1340.12
+  14.16s B      | Bid accepted.
+  14.16s B      | [demo] OPEN | price 1340.12 | minimum next bid 1407.13 | leader you | version 7
+  14.16s C      | Update: [demo] OPEN | price 1340.12 | minimum next bid 1407.13 | leader …a82bdf05f377 | version 7
+  14.16s A      | Update: [demo] OPEN | price 1340.12 | minimum next bid 1407.13 | leader …a82bdf05f377 | version 7
+  14.16s C      | Bid rejected: BID_TOO_LOW
+  14.16s C      | [demo] OPEN | price 1340.12 | minimum next bid 1407.13 | leader …a82bdf05f377 | version 7
+  14.16s A      | Bid rejected: BID_TOO_LOW
+  14.16s A      | [demo] OPEN | price 1340.12 | minimum next bid 1407.13 | leader …a82bdf05f377 | version 7
+  15.16s STEP   | ======== 7 C quits cleanly; A and B keep bidding
+  15.16s C      | >>> quit
+  16.17s C      | (exit code 0)
+  16.17s A      | >>> bid 1500.00
+  16.17s A      | Bid accepted.
+  16.17s A      | [demo] OPEN | price 1500.00 | minimum next bid 1575.00 | leader you | version 8
+  16.17s B      | Update: [demo] OPEN | price 1500.00 | minimum next bid 1575.00 | leader …ea2d1fd4c75e | version 8
+  16.98s B      | >>> bid 1600.00
+  16.98s B      | Bid accepted.
+  16.98s B      | [demo] OPEN | price 1600.00 | minimum next bid 1680.00 | leader you | version 9
+  16.98s A      | Update: [demo] OPEN | price 1600.00 | minimum next bid 1680.00 | leader …a82bdf05f377 | version 9
+  17.78s STEP   | ======== 9 wait for deadline (expect CLOSED once, stable winner)
+  40.06s B      | Update: [demo] CLOSED | final price 1600.00 | winner you | version 10
+  40.06s A      | Update: [demo] CLOSED | final price 1600.00 | winner …a82bdf05f377 | version 10
+  48.49s STEP   | ======== 10 bid after closure (expect AUCTION_CLOSED, state unchanged)
+  48.49s A      | >>> bid 9999.00
+  48.50s A      | Bid rejected: AUCTION_CLOSED
+  48.50s A      | [demo] CLOSED | final price 1600.00 | winner …a82bdf05f377 | version 10
+  49.70s A      | >>> quit
+  50.50s B      | >>> quit
+  51.32s STEP   | ======== SESSION 2: abrupt client loss
+  51.48s SERVER | READY port=5051 deadlineIn=60s
+  54.00s A      | Connected to 127.0.0.1:5051
+  54.00s A      | Type help for commands.
+  54.00s C      | Connected to 127.0.0.1:5051
+  54.00s C      | Type help for commands.
+  54.00s B      | Connected to 127.0.0.1:5051
+  54.00s B      | Type help for commands.
+  55.84s A      | >>> join demo
+  55.89s A      | Joined auction demo as …1fccc1662e12
+  55.90s A      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+  56.64s B      | >>> join demo
+  56.67s B      | Joined auction demo as …bb1e14b4f4a3
+  56.68s B      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+  57.44s C      | >>> join demo
+  57.47s C      | Joined auction demo as …65b581be8f42
+  57.48s C      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+  58.25s STEP   | ======== 8 kill C abruptly (SIGKILL); A and B bid
+  58.25s C      | (killed)
+  58.76s A      | >>> bid 1000.00
+  58.77s A      | Bid accepted.
+  58.77s A      | [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader you | version 1
+  58.77s B      | Update: [demo] OPEN | price 1000.00 | minimum next bid 1050.00 | leader …1fccc1662e12 | version 1
+  59.56s B      | >>> bid 1050.00
+  59.57s B      | Bid accepted.
+  59.57s B      | [demo] OPEN | price 1050.00 | minimum next bid 1102.50 | leader you | version 2
+  59.57s A      | Update: [demo] OPEN | price 1050.00 | minimum next bid 1102.50 | leader …bb1e14b4f4a3 | version 2
+  60.36s A      | >>> quit
+  61.17s B      | >>> quit
+  61.98s STEP   | ======== SESSION 3: no-bid expiry, 8s deadline
+  62.11s SERVER | READY port=5051 deadlineIn=8s
+  64.63s A      | Connected to 127.0.0.1:5051
+  64.63s A      | Type help for commands.
+  66.50s A      | >>> join demo
+  66.55s A      | Joined auction demo as …d586041b1026
+  66.55s A      | [demo] OPEN | price 1000.00 | minimum next bid 1000.00 | leader none | version 0
+  67.30s STEP   | ======== 11 wait for deadline with no bids (expect no winner)
+  70.04s A      | Update: [demo] CLOSED | no winner, no bids accepted | version 1
+  75.31s A      | >>> bid 1000.00
+  75.32s A      | Bid rejected: AUCTION_CLOSED
+  75.32s A      | [demo] CLOSED | no winner, no bids accepted | version 1
+  76.51s A      | >>> quit

@@ -1,0 +1,427 @@
+== C1 join and current state
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1000.00","highestBidderId":null,"version":0}}}
+PASS client-A joined at 1000.00, version 0 | observed: currentPrice=1000.00 version=0
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1000.00","highestBidderId":null,"version":0}}}
+PASS client-B joined at 1000.00, version 0 | observed: currentPrice=1000.00 version=0
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1000.00","highestBidderId":null,"version":0}}}
+PASS client-C joined at 1000.00, version 0 | observed: currentPrice=1000.00 version=0
+PASS three distinct server-issued identities | observed: ids differ
+== C2 low bid rejected, no update to others
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"999.99"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1000.00","highestBidderId":null,"version":0}}}
+PASS 999.99 below start rejected BID_TOO_LOW | observed: accepted=false reason=BID_TOO_LOW
+PASS client-B got no frame from a rejected bid | observed: 0 frames
+== C3 valid bid and automatic update
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1000.00"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1050.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":1}}}
+PASS 1000.00 first bid accepted, next minimum 1050.00 | observed: accepted=true min=1050.00
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1050.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":1}}}
+PASS client-A received AUCTION_UPDATE v1 without sending a command | observed: version=1
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1050.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":1}}}
+PASS client-B received AUCTION_UPDATE v1 without sending a command | observed: version=1
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1050.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":1}}}
+PASS client-C received AUCTION_UPDATE v1 without sending a command | observed: version=1
+== C4 boundary of the 5 percent rule
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1049.99"}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1000.00","minimumNextBid":"1050.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":1}}}
+PASS 1049.99 rejected (one cent under 1050.00) | observed: reason=BID_TOO_LOW
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1050.00"}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1050.00","minimumNextBid":"1102.50","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":2}}}
+PASS 1050.00 accepted, next minimum 1102.50 | observed: accepted=true min=1102.50
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1050.00","minimumNextBid":"1102.50","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":2}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1050.00","minimumNextBid":"1102.50","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":2}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1050.00","minimumNextBid":"1102.50","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":2}}}
+== C5 simultaneous bids, 20 rounds
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1050.00","minimumNextBid":"1102.50","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":2}}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1102.50"}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1102.50"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1102.50"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+PASS round 1 at 1102.50: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+PASS round 1 clients converge, next minimum 1157.63 | observed: [3@1102.50/1157.63, 3@1102.50/1157.63, 3@1102.50/1157.63]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1102.50","minimumNextBid":"1157.63","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":3}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1157.63"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1157.63"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1157.63"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+PASS round 2 at 1157.63: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+PASS round 2 clients converge, next minimum 1215.52 | observed: [4@1157.63/1215.52, 4@1157.63/1215.52, 4@1157.63/1215.52]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1157.63","minimumNextBid":"1215.52","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":4}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1215.52"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1215.52"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1215.52"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+PASS round 3 at 1215.52: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+PASS round 3 clients converge, next minimum 1276.30 | observed: [5@1215.52/1276.30, 5@1215.52/1276.30, 5@1215.52/1276.30]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1215.52","minimumNextBid":"1276.30","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":5}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1276.30"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1276.30"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1276.30"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+PASS round 4 at 1276.30: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+PASS round 4 clients converge, next minimum 1340.12 | observed: [6@1276.30/1340.12, 6@1276.30/1340.12, 6@1276.30/1340.12]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1276.30","minimumNextBid":"1340.12","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":6}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1340.12"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1340.12"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1340.12"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+PASS round 5 at 1340.12: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+PASS round 5 clients converge, next minimum 1407.13 | observed: [7@1340.12/1407.13, 7@1340.12/1407.13, 7@1340.12/1407.13]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1340.12","minimumNextBid":"1407.13","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":7}}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1407.13"}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1407.13"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1407.13"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+PASS round 6 at 1407.13: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+PASS round 6 clients converge, next minimum 1477.49 | observed: [8@1407.13/1477.49, 8@1407.13/1477.49, 8@1407.13/1477.49]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1407.13","minimumNextBid":"1477.49","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":8}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1477.49"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1477.49"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1477.49"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+PASS round 7 at 1477.49: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+PASS round 7 clients converge, next minimum 1551.37 | observed: [9@1477.49/1551.37, 9@1477.49/1551.37, 9@1477.49/1551.37]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1477.49","minimumNextBid":"1551.37","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":9}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1551.37"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1551.37"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1551.37"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+PASS round 8 at 1551.37: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+PASS round 8 clients converge, next minimum 1628.94 | observed: [10@1551.37/1628.94, 10@1551.37/1628.94, 10@1551.37/1628.94]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1551.37","minimumNextBid":"1628.94","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":10}}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1628.94"}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1628.94"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1628.94"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+PASS round 9 at 1628.94: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+PASS round 9 clients converge, next minimum 1710.39 | observed: [11@1628.94/1710.39, 11@1628.94/1710.39, 11@1628.94/1710.39]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1628.94","minimumNextBid":"1710.39","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":11}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1710.39"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1710.39"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1710.39"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+PASS round 10 at 1710.39: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+PASS round 10 clients converge, next minimum 1795.91 | observed: [12@1710.39/1795.91, 12@1710.39/1795.91, 12@1710.39/1795.91]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1710.39","minimumNextBid":"1795.91","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":12}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1795.91"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1795.91"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1795.91"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+PASS round 11 at 1795.91: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+PASS round 11 clients converge, next minimum 1885.71 | observed: [13@1795.91/1885.71, 13@1795.91/1885.71, 13@1795.91/1885.71]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1795.91","minimumNextBid":"1885.71","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":13}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1885.71"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1885.71"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1885.71"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+PASS round 12 at 1885.71: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+PASS round 12 clients converge, next minimum 1980.00 | observed: [14@1885.71/1980.00, 14@1885.71/1980.00, 14@1885.71/1980.00]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1885.71","minimumNextBid":"1980.00","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":14}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1980.00"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1980.00"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"1980.00"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+PASS round 13 at 1980.00: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+PASS round 13 clients converge, next minimum 2079.00 | observed: [15@1980.00/2079.00, 15@1980.00/2079.00, 15@1980.00/2079.00]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"1980.00","minimumNextBid":"2079.00","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":15}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2079.00"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2079.00"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2079.00"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+PASS round 14 at 2079.00: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+PASS round 14 clients converge, next minimum 2182.95 | observed: [16@2079.00/2182.95, 16@2079.00/2182.95, 16@2079.00/2182.95]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2079.00","minimumNextBid":"2182.95","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":16}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2182.95"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2182.95"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2182.95"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+PASS round 15 at 2182.95: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+PASS round 15 clients converge, next minimum 2292.10 | observed: [17@2182.95/2292.10, 17@2182.95/2292.10, 17@2182.95/2292.10]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2182.95","minimumNextBid":"2292.10","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":17}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2292.10"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2292.10"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2292.10"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+PASS round 16 at 2292.10: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+PASS round 16 clients converge, next minimum 2406.71 | observed: [18@2292.10/2406.71, 18@2292.10/2406.71, 18@2292.10/2406.71]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2292.10","minimumNextBid":"2406.71","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":18}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2406.71"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2406.71"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2406.71"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+PASS round 17 at 2406.71: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+PASS round 17 clients converge, next minimum 2527.05 | observed: [19@2406.71/2527.05, 19@2406.71/2527.05, 19@2406.71/2527.05]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2406.71","minimumNextBid":"2527.05","highestBidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","version":19}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2527.05"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2527.05"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2527.05"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+PASS round 18 at 2527.05: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+PASS round 18 clients converge, next minimum 2653.41 | observed: [20@2527.05/2653.41, 20@2527.05/2653.41, 20@2527.05/2653.41]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2527.05","minimumNextBid":"2653.41","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":20}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2653.41"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2653.41"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2653.41"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+PASS round 19 at 2653.41: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+PASS round 19 clients converge, next minimum 2786.09 | observed: [21@2653.41/2786.09, 21@2653.41/2786.09, 21@2653.41/2786.09]
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2653.41","minimumNextBid":"2786.09","highestBidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","version":21}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2786.09"}}
+  client-C >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2786.09"}}
+  client-B >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2786.09"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-B << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-C << {"type":"BID_RESULT","payload":{"accepted":false,"reason":"BID_TOO_LOW","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+PASS round 20 at 2786.09: exactly one winner, two BID_TOO_LOW | observed: wins=1 tooLow=2
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-A >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-A << {"type":"AUCTION_STATE","payload":{"bidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-C << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-C >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-C << {"type":"AUCTION_STATE","payload":{"bidderId":"84cc3223-b4d7-4472-a57a-0fe1f2f39e42","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+PASS round 20 clients converge, next minimum 2925.40 | observed: [22@2786.09/2925.40, 22@2786.09/2925.40, 22@2786.09/2925.40]
+== C6 disconnect one client; others keep working
+  client-B >> {"type":"JOIN_AUCTION","payload":{"auctionId":"demo"}}
+  client-B << {"type":"AUCTION_STATE","payload":{"bidderId":"119ac2dd-5cf2-43c3-9294-0d5f25b3dce4","snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2786.09","minimumNextBid":"2925.40","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":22}}}
+  client-A >> {"type":"PLACE_BID","payload":{"auctionId":"demo","amount":"2925.40"}}
+  client-A << {"type":"BID_RESULT","payload":{"accepted":true,"reason":null,"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2925.40","minimumNextBid":"3071.67","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":23}}}
+PASS client-A bid accepted after client-C dropped | observed: accepted=true
+  client-B << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2925.40","minimumNextBid":"3071.67","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":23}}}
+PASS client-B still receives updates | observed: version=23
+  client-A << {"type":"AUCTION_UPDATE","payload":{"snapshot":{"auctionId":"demo","status":"OPEN","startingPrice":"1000.00","currentPrice":"2925.40","minimumNextBid":"3071.67","highestBidderId":"9a4756cc-7e76-46fd-9e23-b5877ae7e64f","version":23}}}
+RESULT: ALL CHECKS PASSED

@@ -3,6 +3,10 @@ package com.bidnet.auction;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -13,11 +17,14 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AuctionEngineTest {
-    private final AuctionEngine engine = new AuctionEngine();
+    private static final Instant NOW = Instant.parse("2026-11-08T09:00:00Z");
+    private static final Instant DEADLINE = NOW.plusSeconds(60);
+    private final MutableClock clock = new MutableClock(NOW);
+    private final AuctionEngine engine = new AuctionEngine(clock);
 
     @Test
     void acceptsTheDocumentedBoundarySequence() {
-        AuctionSnapshot created = engine.createAuction("camera", money("1000.00"));
+        AuctionSnapshot created = createAuction("camera", money("1000.00"));
         assertEquals(money("1000.00"), created.minimumNextBid());
         assertEquals(0, created.version());
         assertFalse(created.hasAcceptedBid());
@@ -39,7 +46,7 @@ class AuctionEngineTest {
 
     @Test
     void roundsTheFivePercentMinimumUpToTwoDecimals() {
-        engine.createAuction("rounding", money("10.01"));
+        createAuction("rounding", money("10.01"));
         assertTrue(engine.placeBid("rounding", "alice", money("10.01")).accepted());
 
         AuctionSnapshot snapshot = engine.snapshot("rounding");
@@ -50,7 +57,7 @@ class AuctionEngineTest {
 
     @Test
     void acceptsAFirstBidAboveTheStartingPrice() {
-        engine.createAuction("painting", money("1000.00"));
+        createAuction("painting", money("1000.00"));
 
         BidResult result = engine.placeBid("painting", "alice", money("1250.00"));
 
@@ -61,7 +68,7 @@ class AuctionEngineTest {
 
     @Test
     void rejectedBidsNeverMutateTheAuction() {
-        engine.createAuction("invalid", money("1000.00"));
+        createAuction("invalid", money("1000.00"));
         AuctionSnapshot initial = engine.snapshot("invalid");
 
         List<BidResult> results = List.of(
@@ -88,7 +95,7 @@ class AuctionEngineTest {
 
     @Test
     void simultaneousEqualBidsProduceOneAtomicWinner() throws Exception {
-        engine.createAuction("concurrent", money("1000.00"));
+        createAuction("concurrent", money("1000.00"));
         CyclicBarrier start = new CyclicBarrier(3);
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -114,12 +121,12 @@ class AuctionEngineTest {
     @Test
     void validatesAuctionCreationAndLookup() {
         assertThrows(IllegalArgumentException.class,
-                () -> engine.createAuction("blank-price", new BigDecimal("1.001")));
+                () -> engine.createAuction("blank-price", new BigDecimal("1.001"), DEADLINE));
         assertThrows(IllegalArgumentException.class,
-                () -> engine.createAuction("zero-price", BigDecimal.ZERO));
-        engine.createAuction("unique", BigDecimal.ONE);
+                () -> engine.createAuction("zero-price", BigDecimal.ZERO, DEADLINE));
+        createAuction("unique", BigDecimal.ONE);
         assertThrows(IllegalArgumentException.class,
-                () -> engine.createAuction("unique", BigDecimal.TEN));
+                () -> engine.createAuction("unique", BigDecimal.TEN, DEADLINE));
         assertThrows(AuctionNotFoundException.class,
                 () -> engine.snapshot("missing"));
     }
@@ -129,7 +136,37 @@ class AuctionEngineTest {
         return engine.placeBid("concurrent", bidderId, money("1000.00"));
     }
 
+    private AuctionSnapshot createAuction(String auctionId, BigDecimal startingPrice) {
+        return engine.createAuction(auctionId, startingPrice, DEADLINE);
+    }
+
     private static BigDecimal money(String value) {
         return new BigDecimal(value);
+    }
+
+    private static final class MutableClock extends Clock {
+        private volatile Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            if (!ZoneOffset.UTC.equals(zone)) {
+                throw new UnsupportedOperationException("This test clock only supports UTC");
+            }
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
     }
 }

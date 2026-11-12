@@ -6,5 +6,6 @@ public enum BidRejectionReason {
     NON_POSITIVE_AMOUNT,
     TOO_MANY_DECIMAL_PLACES,
     BID_TOO_LOW,
+    DEADLINE_REACHED,
     AUCTION_CLOSED
 }

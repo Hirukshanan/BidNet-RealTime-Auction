@@ -8,7 +8,9 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -146,9 +148,18 @@ public final class SocketProbe {
                                 && "0".equals(field(state, "version")) && conn.bidderId != null,
                         "currentPrice=" + field(state, "currentPrice") + " version=" + field(state, "version"));
             }
+            // Identities are null when AUCTION_STATE never arrived. Every later check
+            // depends on them, so stop with a clear precondition failure instead.
+            List<String> ids = Arrays.asList(a.bidderId, b.bidderId, c.bidderId);
+            if (ids.contains(null)) {
+                check("all three clients received a server-issued identity", false, "bidderIds=" + ids);
+                System.out.println("RESULT: PRECONDITION FAILED - no AUCTION_STATE/bidderId for every client;"
+                        + " later checks not run. Check the server is freshly started and reachable"
+                        + " (firewall prompt?), then rerun.");
+                System.exit(1);
+            }
             check("three distinct server-issued identities",
-                    !a.bidderId.equals(b.bidderId) && !b.bidderId.equals(c.bidderId)
-                            && !a.bidderId.equals(c.bidderId), "ids differ");
+                    new HashSet<>(ids).size() == 3, "bidderIds=" + ids);
 
             System.out.println("== C2 low bid rejected, no update to others");
             a.bid("999.99");
@@ -171,7 +182,8 @@ public final class SocketProbe {
                 check(conn.name + " received AUCTION_UPDATE v1 without sending a command",
                         "1".equals(field(update, "version"))
                                 && a.bidderId.equals(field(update, "highestBidderId")),
-                        "version=" + field(update, "version"));
+                        "version=" + field(update, "version")
+                                + " highestBidderId=" + field(update, "highestBidderId"));
             }
 
             System.out.println("== C4 boundary of the 5 percent rule");
@@ -196,14 +208,17 @@ public final class SocketProbe {
             String before = latestMinimum(b);
             c.close();
             Thread.sleep(300);
-            String amount = before;
-            a.bid(amount);
-            String afterDrop = a.await("BID_RESULT");
-            check("client-A bid accepted after client-C dropped",
-                    "true".equals(field(afterDrop, "accepted")), "accepted=" + field(afterDrop, "accepted"));
-            String seen = b.await("AUCTION_UPDATE");
-            check("client-B still receives updates", seen != null, "version=" + field(seen, "version"));
-            a.drain(200);
+            if (before == null) {
+                check("client-B read the current minimum before the drop", false, "minimumNextBid=null");
+            } else {
+                a.bid(before);
+                String afterDrop = a.await("BID_RESULT");
+                check("client-A bid accepted after client-C dropped",
+                        "true".equals(field(afterDrop, "accepted")), "accepted=" + field(afterDrop, "accepted"));
+                String seen = b.await("AUCTION_UPDATE");
+                check("client-B still receives updates", seen != null, "version=" + field(seen, "version"));
+                a.drain(200);
+            }
         }
 
         System.out.println(failures == 0 ? "RESULT: ALL CHECKS PASSED" : "RESULT: " + failures + " CHECK(S) FAILED");
@@ -224,6 +239,11 @@ public final class SocketProbe {
     private static void simultaneous(List<Conn> conns) throws Exception {
         for (int round = 1; round <= 20; round++) {
             String min = latestMinimum(conns.get(0));
+            if (min == null) {
+                check("round " + round + ": server reported the current minimum", false,
+                        "minimumNextBid=null; remaining rounds skipped");
+                return;
+            }
             BigDecimal expectedNext = new BigDecimal(min).multiply(new BigDecimal("1.05"))
                     .setScale(2, RoundingMode.CEILING);
             CountDownLatch go = new CountDownLatch(1);

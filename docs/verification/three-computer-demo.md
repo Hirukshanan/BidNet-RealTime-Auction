@@ -1,9 +1,10 @@
 # Three-computer demo verification (issue #8)
 
-**Status on 11 November 2026: not complete.** All 11 demo scenarios pass on one
-Mac with a real server and three real console clients, using the combined code of
-PRs #11, #12 and #13 plus two integration fixes. No check has run between two
-computers yet. Keep issue #8 open until the LAN run below is recorded.
+**Status on 12 November 2026: not complete.** PRs #11, #12 and #13 are merged
+into `main`, including both integration fixes below. The current PR head
+(`108e392`) passes `mvn clean verify` with 42 tests. All 11 demo scenarios pass
+on one Mac with a real server and three real console clients. No check has run
+between two computers yet. Keep issue #8 open until the LAN run below is recorded.
 
 ## What each kind of evidence proves
 
@@ -17,27 +18,28 @@ computers yet. Keep issue #8 open until the LAN run below is recorded.
 
 | Criterion | Status | Evidence and what remains |
 | --- | --- | --- |
-| Fresh clone builds on JDK 21, Windows and macOS | **Partial** | macOS: `mvn clean verify` passed on the combined code (40 tests, JDK 21.0.13). Windows has hosted CI only. Repeat on Ilmam's computer and on the final commit. |
+| Fresh clone builds on JDK 21, Windows and macOS | **Partial** | macOS: `mvn clean verify` passed on PR head `108e392` (42 tests, JDK 21.0.13). Windows has hosted CI only. Repeat on Ilmam's computer and on the final commit. |
 | One reachable server and three clients across computers | **Ready to run** | Same-machine run passed with the #5 client. Not run across computers. |
 | Join/current state, valid bid, low-bid rejection, automatic updates | **Same-machine only** | Probe and #5 client passed (scenarios 1 to 5). Repeat over LAN. |
 | Simultaneous bids against the percentage rules | **Same-machine only** | 20 probe rounds and 5 client rounds passed. Repeat over LAN. |
 | Disconnect one client; others still work | **Same-machine only** | Clean quit and SIGKILL of a client both passed. Dropped Wi-Fi not tested. |
 | Closure, final winner/no-bid, late-bid rejection | **Same-machine only** | Passed with #7 and the `AUCTION_ENDED` client fix (scenarios 9 to 11). Repeat over LAN. |
 | Record commands, OS, results, limitations | **In progress** | This file. Fill in the LAN tables below. |
-| Retest blockers; separate LAN from CI | **In progress** | Two integration bugs found and fixed locally, then retested (below). LAN retest pending. |
+| Retest blockers; separate LAN from CI | **In progress** | Both integration bugs (below) are fixed in `main` and retested at `108e392`. LAN retest pending. |
 | Synthetic identities; redact network details | **Met so far** | Evidence files were scanned for addresses, hostname and username. Repeat for each new file. |
 
 ## Blockers
 
-| Blocker | Owner | Target |
+| Blocker | Owner | Status |
 | --- | --- | --- |
-| PR #11 (#6 server integration): approved, not merged | Hirukshanan | Merge first |
-| PR #12 (#5 client): open; needs integration fix 1 below | Risapan | After #11 |
-| PR #13 (#7 expiry): open; needs integration fix 2 below, or #12 must include it | TheGuy24084 | After #12 |
-| Unexplained first-run failure below | Risapan | Before the LAN demo |
+| PR #11 (#6 server integration) | Hirukshanan | **Merged** |
+| PR #12 (#5 client), with integration fix 2 | Risapan | **Merged** |
+| PR #13 (#7 expiry), with integration fix 1 | TheGuy24084 | **Merged** |
+| Real three-computer LAN run | Team | **Pending**: blocks closing #8 |
+| Unexplained first-run failure below | Risapan | **Open**: cause unknown; watch for it in the LAN run |
 
-PR #11 still has the template text `Closes #<issue-number>`, so merging it will
-not close #6 automatically.
+PR #11 used the template text `Closes #<issue-number>`, so its merge did not
+close #6 automatically. Check #6 and close it by hand if it is still open.
 
 ## Integration bugs found on 11 November
 
@@ -50,7 +52,9 @@ Each PR passes on its own, but merging #11, #12 and #13 together exposed two bug
    #12's `AuctionDisplay` prints as "Ignored an unsupported server message". Fix:
    `case "AUCTION_UPDATE", "AUCTION_ENDED" -> showUpdate(payload);`
 
-With both fixes, `mvn clean verify` passes (40 tests) and scenarios 1 to 11 pass.
+With both fixes, `mvn clean verify` passed (40 tests at the time) and scenarios
+1 to 11 passed. Both fixes are now in `main`. The current PR head adds the
+merged #7 tests and passes 42.
 
 ## Observed results: same-machine live run (11 November)
 
@@ -113,6 +117,9 @@ as LAN checks.
 The first run against the Mac's own LAN address connected, but all three sockets
 received no `AUCTION_STATE` within 3 seconds. The probe then stopped with a
 `NullPointerException` in its own code, which also skipped its later checks.
+The probe now checks for missing identities first. If any client has no
+server-issued `bidderId`, it reports a failed precondition and exits with
+code 1. It also no longer crashes when a later re-join returns no state.
 
 - **Ruled out:** a restart race in the test script. The old listener was gone
   within a second, and three exact replays of the sequence passed.
@@ -138,10 +145,9 @@ received no `AUCTION_STATE` within 3 seconds. The probe then stopped with a
 
 ## Runbook for the real LAN run
 
-Run this after PRs #11, #12 and #13 are merged with both integration fixes, and
-record the exact commit. Before then,
-steps 1 to 4 can still produce real LAN evidence for the server using the probe,
-as long as it is labelled as a probe run.
+PRs #11, #12 and #13 and both integration fixes are in `main`, so this can run
+now. Record the exact commit. Label any steps 1 to 4 results from the probe as a
+probe run, not as the demo.
 
 ### 1. Build a fresh clone on every computer
 
@@ -211,7 +217,7 @@ java docs/verification/SocketProbe.java <SERVER-ADDRESS> 5051
 
 ### 5. Run the demo with the #5 client on three computers
 
-Use the documented client command once #5 lands, and only synthetic bidder names.
+Use the documented #5 client command (see `docs/protocol.md`) and only synthetic bidder names.
 Restart the server between scenarios where the starting state matters.
 
 | # | Action | Expected |

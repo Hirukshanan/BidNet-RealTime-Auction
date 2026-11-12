@@ -18,6 +18,8 @@ import java.math.BigDecimal;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -29,7 +31,10 @@ class ConsoleClientTest {
     @BeforeEach
     void startServer() throws IOException {
         AuctionEngine engine = new AuctionEngine();
-        engine.createAuction("camera", new BigDecimal("1000.00"));
+        engine.createAuction(
+                "camera",
+                new BigDecimal("1000.00"),
+                Instant.now().plus(Duration.ofHours(1)));
         server = new BidNetServer(0, engine);
         Thread.startVirtualThread(() -> {
             try {

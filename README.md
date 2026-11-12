@@ -7,14 +7,17 @@ to a central Java server over TCP.
 
 The server supports in-memory auctions, connection-bound bidder identities,
 JOIN_AUCTION and PLACE_BID messages, atomic bid validation, and versioned live
-updates to subscribers. The standard server creates auction `demo` at `1000.00`.
+updates to subscribers. Auctions close at an authoritative UTC deadline and emit
+one final `AUCTION_ENDED` snapshot. The standard server creates auction `demo` at
+`1000.00` with a ten-minute deadline.
 
 The console client joins auctions, places bids and shows live updates while the
-keyboard is idle. Auction expiry and final closure are tracked in issue #7.
-Restarting the server resets in-memory auction state.
+keyboard is idle. Restarting the server resets in-memory auction
+state.
 
 See [protocol and run instructions](docs/protocol.md) and
 [auction engine rules](docs/auction-engine.md).
+See also the [auction expiry contract](docs/auction-expiry.md).
 
 ## Technologies
 

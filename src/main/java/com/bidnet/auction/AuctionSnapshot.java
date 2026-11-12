@@ -1,6 +1,7 @@
 package com.bidnet.auction;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -11,6 +12,7 @@ public record AuctionSnapshot(
         BigDecimal currentPrice,
         BigDecimal minimumNextBid,
         String highestBidderId,
+        Instant deadline,
         long version) {
 
     public AuctionSnapshot {
@@ -19,6 +21,7 @@ public record AuctionSnapshot(
         Objects.requireNonNull(startingPrice, "startingPrice");
         Objects.requireNonNull(currentPrice, "currentPrice");
         Objects.requireNonNull(minimumNextBid, "minimumNextBid");
+        Objects.requireNonNull(deadline, "deadline");
         if (version < 0) {
             throw new IllegalArgumentException("version cannot be negative");
         }

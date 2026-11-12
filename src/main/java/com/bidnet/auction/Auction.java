@@ -1,12 +1,15 @@
 package com.bidnet.auction;
 
 import java.math.BigDecimal;
-import java.util.Objects;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.concurrent.locks.ReentrantLock;
 
 final class Auction {
     private final String auctionId;
     private final BigDecimal startingPrice;
+    private final Instant deadline;
+    private final Clock clock;
     private final ReentrantLock lock = new ReentrantLock();
 
     private AuctionStatus status = AuctionStatus.OPEN;
@@ -14,7 +17,7 @@ final class Auction {
     private String highestBidderId;
     private long version;
 
-    Auction(String auctionId, BigDecimal startingPrice) {
+    Auction(String auctionId, BigDecimal startingPrice, Instant deadline, Clock clock) {
         if (auctionId == null || auctionId.isBlank()) {
             throw new IllegalArgumentException("auctionId must not be blank");
         }
@@ -27,9 +30,20 @@ final class Auction {
         if (startingPrice.signum() <= 0) {
             throw new IllegalArgumentException("startingPrice must be positive");
         }
+        if (deadline == null) {
+            throw new IllegalArgumentException("deadline must not be null");
+        }
+        if (clock == null) {
+            throw new IllegalArgumentException("clock must not be null");
+        }
+        if (!deadline.isAfter(clock.instant())) {
+            throw new IllegalArgumentException("deadline must be in the future");
+        }
         this.auctionId = auctionId;
         this.startingPrice = MoneyPolicy.normalize(startingPrice);
         this.currentPrice = this.startingPrice;
+        this.deadline = deadline;
+        this.clock = clock;
     }
 
     BidResult placeBid(String bidderId, BigDecimal offeredAmount) {
@@ -38,6 +52,13 @@ final class Auction {
             AuctionSnapshot before = snapshotLocked();
             if (status != AuctionStatus.OPEN) {
                 return BidResult.rejected(BidRejectionReason.AUCTION_CLOSED, before);
+            }
+            if (!clock.instant().isBefore(deadline)) {
+                closeLocked();
+                return BidResult.rejected(
+                        BidRejectionReason.DEADLINE_REACHED,
+                        snapshotLocked(),
+                        true);
             }
             if (bidderId == null || bidderId.isBlank()) {
                 return BidResult.rejected(BidRejectionReason.INVALID_BIDDER, before);
@@ -76,6 +97,27 @@ final class Auction {
         }
     }
 
+    CloseResult closeIfExpired() {
+        lock.lock();
+        try {
+            if (status == AuctionStatus.CLOSED) {
+                return CloseResult.unchanged(snapshotLocked());
+            }
+            if (clock.instant().isBefore(deadline)) {
+                return CloseResult.unchanged(snapshotLocked());
+            }
+            closeLocked();
+            return CloseResult.closed(snapshotLocked());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void closeLocked() {
+        status = AuctionStatus.CLOSED;
+        version++;
+    }
+
     private BigDecimal minimumNextBidLocked() {
         return highestBidderId == null ? startingPrice : MoneyPolicy.nextMinimum(currentPrice);
     }
@@ -88,6 +130,7 @@ final class Auction {
                 currentPrice,
                 minimumNextBidLocked(),
                 highestBidderId,
+                deadline,
                 version);
     }
 }

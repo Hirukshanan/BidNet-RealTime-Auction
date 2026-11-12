@@ -3,7 +3,9 @@ package com.bidnet.server;
 import com.bidnet.auction.AuctionEngine;
 import com.bidnet.auction.AuctionNotFoundException;
 import com.bidnet.auction.AuctionSnapshot;
+import com.bidnet.auction.AuctionStatus;
 import com.bidnet.auction.BidResult;
+import com.bidnet.auction.CloseResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -20,32 +22,65 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class BidNetServer implements AutoCloseable {
     private final ServerSocket listener;
     private final AuctionEngine engine;
+    private final Clock clock;
+    private final ScheduledExecutorService expiryScheduler;
     private final Set<Session> clients = ConcurrentHashMap.newKeySet();
     private final ObjectMapper mapper = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     public BidNetServer(int port) throws IOException {
-        this(port, demoEngine());
+        this(port, Clock.systemUTC());
+    }
+
+    private BidNetServer(int port, Clock clock) throws IOException {
+        this(port, demoEngine(clock), clock);
     }
 
     public BidNetServer(int port, AuctionEngine engine) throws IOException {
-        this.engine = Objects.requireNonNull(engine, "engine");
-        listener = new ServerSocket(port);
+        this(port, engine, Clock.systemUTC());
     }
 
-    private static AuctionEngine demoEngine() {
-        AuctionEngine engine = new AuctionEngine();
-        engine.createAuction("demo", new BigDecimal("1000.00"));
+    public BidNetServer(int port, AuctionEngine engine, Clock clock) throws IOException {
+        this(port, engine, clock, Executors.newSingleThreadScheduledExecutor(runnable ->
+                Thread.ofPlatform().daemon(true).name("bidnet-expiry").unstarted(runnable)));
+    }
+
+    BidNetServer(
+            int port,
+            AuctionEngine engine,
+            Clock clock,
+            ScheduledExecutorService expiryScheduler) throws IOException {
+        this.engine = Objects.requireNonNull(engine, "engine");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.expiryScheduler = Objects.requireNonNull(expiryScheduler, "expiryScheduler");
+        listener = new ServerSocket(port);
+        for (String auctionId : engine.auctionIds()) {
+            scheduleExpiry(auctionId);
+        }
+    }
+
+    private static AuctionEngine demoEngine(Clock clock) {
+        AuctionEngine engine = new AuctionEngine(clock);
+        engine.createAuction(
+                "demo",
+                new BigDecimal("1000.00"),
+                clock.instant().plus(Duration.ofMinutes(10)));
         return engine;
     }
 
@@ -150,13 +185,9 @@ public final class BidNetServer implements AutoCloseable {
             body.set("snapshot", snapshot(result.snapshot()));
             session.send(response);
             if (result.accepted()) {
-                ObjectNode update = message("AUCTION_UPDATE");
-                update.putObject("payload").set("snapshot", snapshot(result.snapshot()));
-                for (Session subscriber : clients) {
-                    if (subscriber.subscriptions.contains(auctionId)) {
-                        subscriber.send(update);
-                    }
-                }
+                broadcast("AUCTION_UPDATE", result.snapshot());
+            } else if (result.closedNow()) {
+                broadcast("AUCTION_ENDED", result.snapshot());
             }
         } catch (JsonProcessingException failure) {
             session.send(error("INVALID_JSON"));
@@ -173,8 +204,62 @@ public final class BidNetServer implements AutoCloseable {
         json.put("currentPrice", state.currentPrice().toPlainString());
         json.put("minimumNextBid", state.minimumNextBid().toPlainString());
         json.put("highestBidderId", state.highestBidderId());
+        json.put("deadline", state.deadline().toString());
         json.put("version", state.version());
         return json;
+    }
+
+    private void broadcast(String type, AuctionSnapshot state) {
+        ObjectNode event = message(type);
+        event.putObject("payload").set("snapshot", snapshot(state));
+        for (Session subscriber : clients) {
+            if (subscriber.subscriptions.contains(state.auctionId())) {
+                subscriber.send(event);
+            }
+        }
+    }
+
+    private void scheduleExpiry(String auctionId) {
+        if (expiryScheduler.isShutdown()) {
+            return;
+        }
+        AuctionSnapshot state = engine.snapshot(auctionId);
+        if (state.status() != AuctionStatus.OPEN) {
+            return;
+        }
+        Duration remaining = Duration.between(clock.instant(), state.deadline());
+        long delayNanos;
+        if (remaining.isNegative() || remaining.isZero()) {
+            delayNanos = 0;
+        } else {
+            try {
+                delayNanos = remaining.toNanos();
+            } catch (ArithmeticException overflow) {
+                delayNanos = Long.MAX_VALUE;
+            }
+        }
+        try {
+            expiryScheduler.schedule(() -> expireAuction(auctionId), delayNanos, TimeUnit.NANOSECONDS);
+        } catch (RejectedExecutionException ignored) {
+            // Server shutdown won the race with scheduling.
+        }
+    }
+
+    void expireAuction(String auctionId) {
+        if (expiryScheduler.isShutdown()) {
+            return;
+        }
+        CloseResult result = engine.closeIfExpired(auctionId);
+        if (result.closedNow()) {
+            broadcast("AUCTION_ENDED", result.snapshot());
+        } else if (result.snapshot().status() == AuctionStatus.OPEN) {
+            // A wall-clock adjustment or an early callback must not close the auction early.
+            scheduleExpiry(auctionId);
+        }
+    }
+
+    boolean expirySchedulerIsShutdown() {
+        return expiryScheduler.isShutdown();
     }
 
     private ObjectNode message(String type) {
@@ -238,6 +323,7 @@ public final class BidNetServer implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
+        expiryScheduler.shutdownNow();
         try {
             listener.close();
         } finally {

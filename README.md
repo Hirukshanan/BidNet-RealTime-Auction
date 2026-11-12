@@ -9,9 +9,9 @@ The server supports in-memory auctions, connection-bound bidder identities,
 JOIN_AUCTION and PLACE_BID messages, atomic bid validation, and versioned live
 updates to subscribers. The standard server creates auction `demo` at `1000.00`.
 
-The console client currently supports ECHO diagnostics only. Live console auction
-commands are tracked in issue #5; auction expiry and final closure are tracked in
-issue #7. Restarting the server resets in-memory auction state.
+The console client joins auctions, places bids and shows live updates while the
+keyboard is idle. Auction expiry and final closure are tracked in issue #7.
+Restarting the server resets in-memory auction state.
 
 See [protocol and run instructions](docs/protocol.md) and
 [auction engine rules](docs/auction-engine.md).

@@ -8,12 +8,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -114,16 +117,27 @@ class TcpCommunicationTest {
                 "-cp", classpath, "com.bidnet.client.ConsoleClient", "127.0.0.1", String.valueOf(server.getPort()))
                 .redirectErrorStream(true).start();
         try {
-            client.getOutputStream().write("Hello from the console\nquit\n".getBytes(StandardCharsets.UTF_8));
-            client.getOutputStream().close();
-            assertTrue(client.waitFor(10, TimeUnit.SECONDS), "Console client must exit after quit");
-            String output = new String(client.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            assertEquals(0, client.exitValue(), output);
-            String response = output.lines().filter(line -> line.startsWith("Server: "))
-                    .findFirst().orElseThrow(() -> new AssertionError("Console did not display a server response"));
-            JsonNode message = mapper.readTree(response.substring("Server: ".length()));
+            // Stops the blocking reads below if the client never responds.
+            CompletableFuture.delayedExecutor(15, TimeUnit.SECONDS).execute(client::destroyForcibly);
+            BufferedWriter keyboard = new BufferedWriter(
+                    new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8));
+            BufferedReader output = new BufferedReader(
+                    new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
+            keyboard.write("echo Hello from the console\n");
+            keyboard.flush();
+            // Replies arrive independently, so wait for this one before quitting.
+            String line;
+            while ((line = output.readLine()) != null && !line.startsWith("Server: ")) {
+                // Skip the connection banner.
+            }
+            assertNotNull(line, "Console did not display a server response");
+            JsonNode message = mapper.readTree(line.substring("Server: ".length()));
             assertEquals("ECHO_RESPONSE", message.path("type").asText());
             assertEquals("Hello from the console", message.path("payload").path("message").asText());
+            keyboard.write("quit\n");
+            keyboard.flush();
+            assertTrue(client.waitFor(10, TimeUnit.SECONDS), "Console client must exit after quit");
+            assertEquals(0, client.exitValue());
         } finally {
             client.destroyForcibly();
         }

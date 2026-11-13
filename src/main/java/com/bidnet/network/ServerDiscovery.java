@@ -13,6 +13,8 @@ public final class ServerDiscovery implements AutoCloseable {
     public static final int PORT = 5052;
     private static final String SERVICE = "BIDNET_DISCOVERY_V1";
     private static final ObjectMapper JSON = new ObjectMapper();
+    // Lets a client recognise one server answering on several of its addresses.
+    private final String serverId = UUID.randomUUID().toString();
     private final DatagramSocket socket;
     private final Thread responder;
 
@@ -47,6 +49,7 @@ public final class ServerDiscovery implements AutoCloseable {
                         || request.path("nonce").asText().length() > 64) continue;
                 byte[] reply = JSON.createObjectNode().put("service", SERVICE).put("type", "SERVER")
                         .put("nonce", request.path("nonce").asText()).put("port", tcpPort)
+                        .put("id", serverId)
                         .toString().getBytes(StandardCharsets.UTF_8);
                 socket.send(new DatagramPacket(reply, reply.length, packet.getAddress(), packet.getPort()));
             } catch (IOException failure) {
@@ -101,7 +104,13 @@ public final class ServerDiscovery implements AutoCloseable {
                     int tcpPort = reply.path("port").intValue();
                     if (tcpPort < 1 || tcpPort > 65535) continue;
                     Server server = new Server(packet.getAddress().getHostAddress(), tcpPort);
-                    found.put(server.host() + ":" + tcpPort, server);
+                    // A server reached through loopback and a broadcast replies once per address.
+                    // List it once, preferring loopback, which needs no firewall rule.
+                    JsonNode id = reply.path("id");
+                    String key = id.isTextual() && !id.textValue().isEmpty() && id.textValue().length() <= 64
+                            ? "id:" + id.textValue() : server.host() + ":" + tcpPort;
+                    if (packet.getAddress().isLoopbackAddress()) found.put(key, server);
+                    else found.putIfAbsent(key, server);
                 } catch (SocketTimeoutException noReplyYet) { /* Bounded discovery window. */ }
             }
         }

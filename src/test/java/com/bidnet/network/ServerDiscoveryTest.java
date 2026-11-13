@@ -61,6 +61,46 @@ class ServerDiscoveryTest {
         }
     }
 
+    @Test void listsOneServerOnceWhenItAnswersOnSeveralAddresses() throws Exception {
+        List<InetAddress> targets = new java.util.ArrayList<>();
+        // Non-loopback first: loopback must still win whatever the reply order.
+        for (NetworkInterface network : java.util.Collections.list(NetworkInterface.getNetworkInterfaces())) {
+            if (!network.isUp() || network.isLoopback()) continue;
+            for (InterfaceAddress address : network.getInterfaceAddresses()) {
+                if (address.getAddress() instanceof Inet4Address) targets.add(address.getAddress());
+            }
+        }
+        targets.add(loopback);
+        try (ServerDiscovery beacon = new ServerDiscovery(5051, 0)) {
+            var found = ServerDiscovery.find(Duration.ofMillis(300), targets, beacon.port());
+            assertEquals(1, found.size(), found.toString());
+            assertEquals(loopback.getHostAddress(), found.getFirst().host());
+        }
+    }
+
+    @Test void keepsDistinctServersThatShareAHostAndReportDifferentIds() throws Exception {
+        try (ServerDiscovery first = new ServerDiscovery(5051, 0);
+             DatagramSocket relay = new DatagramSocket(0)) {
+            // Stand-in for a second server: same source address, different identity and TCP port.
+            Thread responder = Thread.startVirtualThread(() -> {
+                try {
+                    DatagramPacket query = new DatagramPacket(new byte[1024], 1024);
+                    relay.receive(query);
+                    String nonce = new ObjectMapper().readTree(query.getData(),0,query.getLength()).path("nonce").asText();
+                    for (String id : List.of("a", "b", "a")) {
+                        byte[] data = ("{\"service\":\"BIDNET_DISCOVERY_V1\",\"type\":\"SERVER\",\"nonce\":\""
+                                + nonce + "\",\"port\":6001,\"id\":\"" + id + "\"}").getBytes(StandardCharsets.UTF_8);
+                        relay.send(new DatagramPacket(data,data.length,query.getAddress(),query.getPort()));
+                    }
+                } catch (IOException failure) { throw new RuntimeException(failure); }
+            });
+            var found = ServerDiscovery.find(Duration.ofMillis(300),List.of(loopback),relay.getLocalPort());
+            responder.join(3000);
+            assertEquals(2, found.size(), found.toString());
+            assertEquals(1, ServerDiscovery.find(Duration.ofMillis(200),List.of(loopback),first.port()).size());
+        }
+    }
+
     @Test void closingResponderReleasesItsPortAndDoesNotLeaveStaleResults() throws Exception {
         ServerDiscovery beacon = new ServerDiscovery(5051,0);
         int udpPort = beacon.port();

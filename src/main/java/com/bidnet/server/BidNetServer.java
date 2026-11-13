@@ -1,6 +1,7 @@
 package com.bidnet.server;
 
 import com.bidnet.auction.AuctionEngine;
+import com.bidnet.network.ServerDiscovery;
 import com.bidnet.auction.AuctionNotFoundException;
 import com.bidnet.auction.AuctionSnapshot;
 import com.bidnet.auction.AuctionStatus;
@@ -334,11 +335,42 @@ public final class BidNetServer implements AutoCloseable {
     }
 
     public static void main(String[] args) throws IOException {
-        int port = args.length > 0 ? Integer.parseInt(args[0]) : 5000;
-        try (BidNetServer server = new BidNetServer(port)) {
+        int port = 5051;
+        if (args.length > 0) {
+            try {
+                port = Integer.parseInt(args[0].strip());
+            } catch (NumberFormatException invalid) {
+                port = -1;
+            }
+            if (port < 1 || port > 65535) {
+                System.err.println("Invalid port: " + args[0] + ". Use a number from 1 to 65535, for example 5051.");
+                System.exit(2);
+            }
+        }
+        BidNetServer started;
+        try {
+            started = new BidNetServer(port);
+        } catch (java.net.BindException occupied) {
+            System.err.println("Cannot start: TCP port " + port + " is already in use. Stop the other"
+                    + " server or choose a free port and pass the same number to the clients.");
+            System.exit(1);
+            return;
+        }
+        try (BidNetServer server = started) {
             System.out.println("BidNet server listening on port " + server.getPort());
             System.out.println("Demo auction: demo (starting price 1000.00)");
-            server.start();
+            ServerDiscovery discovery = null;
+            try {
+                discovery = new ServerDiscovery(server.getPort());
+                System.out.println("LAN discovery listening on UDP port " + ServerDiscovery.PORT);
+            } catch (SocketException unavailable) {
+                System.err.println("LAN discovery unavailable. Clients can still enter the server host and TCP port manually.");
+            }
+            try {
+                server.start();
+            } finally {
+                if (discovery != null) discovery.close();
+            }
         }
     }
 }

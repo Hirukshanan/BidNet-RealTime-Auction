@@ -335,8 +335,28 @@ public final class BidNetServer implements AutoCloseable {
     }
 
     public static void main(String[] args) throws IOException {
-        int port = args.length > 0 ? Integer.parseInt(args[0]) : 5051;
-        try (BidNetServer server = new BidNetServer(port)) {
+        int port = 5051;
+        if (args.length > 0) {
+            try {
+                port = Integer.parseInt(args[0].strip());
+            } catch (NumberFormatException invalid) {
+                port = -1;
+            }
+            if (port < 1 || port > 65535) {
+                System.err.println("Invalid port: " + args[0] + ". Use a number from 1 to 65535, for example 5051.");
+                System.exit(2);
+            }
+        }
+        BidNetServer started;
+        try {
+            started = new BidNetServer(port);
+        } catch (java.net.BindException occupied) {
+            System.err.println("Cannot start: TCP port " + port + " is already in use. Stop the other"
+                    + " server or choose a free port and pass the same number to the clients.");
+            System.exit(1);
+            return;
+        }
+        try (BidNetServer server = started) {
             System.out.println("BidNet server listening on port " + server.getPort());
             System.out.println("Demo auction: demo (starting price 1000.00)");
             ServerDiscovery discovery = null;

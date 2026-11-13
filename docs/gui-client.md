@@ -85,8 +85,9 @@ one result, then **Connect** and **Join Auction**. Manual host/port entry is
 still available. Selecting a result fills the server's advertised TCP port.
 
 Discovery uses IPv4 UDP broadcasts on port 5052 plus a loopback request for
-same-computer use. Replies are matched to the current search request and deduplicated
-by endpoint. The service does not query an external directory or upload auction data.
+same-computer use. Replies are matched to the current search request. Each server
+includes an instance ID in its reply, so one server that answers on several
+addresses (for example loopback and its Wi-Fi address) is listed once. The service does not query an external directory or upload auction data.
 
 Server firewall rules must allow UDP 5052 and the auction TCP port (normally
 5051). Isolated guest/campus Wi-Fi may block discovery. The same Wi-Fi name alone

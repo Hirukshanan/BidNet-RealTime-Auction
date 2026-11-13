@@ -76,3 +76,24 @@ java -cp target/bidnet.jar com.bidnet.client.GuiClient 127.0.0.1 5051
 If a connection is refused, confirm the server printed its listening port and
 that the GUI host/port match it. A GUI window alone does not start the server.
 After rebuilding, close old GUI windows and relaunch to load the new code.
+
+## Same-network server discovery
+
+Use the updated server and GUI on both computers. After starting the server,
+click **Find servers** in the client, wait approximately three seconds, select
+one result, then **Connect** and **Join Auction**. Manual host/port entry is
+still available. Selecting a result fills the server's advertised TCP port.
+
+Discovery uses IPv4 UDP broadcasts on port 5052 plus a loopback request for
+same-computer use. Replies are matched to the current search request and deduplicated
+by endpoint. The service does not query an external directory or upload auction data.
+
+Server firewall rules must allow UDP 5052 and the auction TCP port (normally
+5051). Isolated guest/campus Wi-Fi may block discovery. The same Wi-Fi name alone
+does not guarantee reachability. One server per computer can bind the discovery
+port; other TCP servers can still be connected to manually. Actual Windows/Mac
+cross-computer discovery must be verified on the team's network.
+
+The server selector stays hidden until a search finds more than one server. A
+single result fills the host/port automatically; click Connect to continue.
+The selector is hidden while searching and while connected.

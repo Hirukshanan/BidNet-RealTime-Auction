@@ -1,6 +1,7 @@
 package com.bidnet.server;
 
 import com.bidnet.auction.AuctionEngine;
+import com.bidnet.network.ServerDiscovery;
 import com.bidnet.auction.AuctionNotFoundException;
 import com.bidnet.auction.AuctionSnapshot;
 import com.bidnet.auction.AuctionStatus;
@@ -338,7 +339,18 @@ public final class BidNetServer implements AutoCloseable {
         try (BidNetServer server = new BidNetServer(port)) {
             System.out.println("BidNet server listening on port " + server.getPort());
             System.out.println("Demo auction: demo (starting price 1000.00)");
-            server.start();
+            ServerDiscovery discovery = null;
+            try {
+                discovery = new ServerDiscovery(server.getPort());
+                System.out.println("LAN discovery listening on UDP port " + ServerDiscovery.PORT);
+            } catch (SocketException unavailable) {
+                System.err.println("LAN discovery unavailable. Clients can still enter the server host and TCP port manually.");
+            }
+            try {
+                server.start();
+            } finally {
+                if (discovery != null) discovery.close();
+            }
         }
     }
 }

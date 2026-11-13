@@ -114,6 +114,24 @@ class GuiClientTest {
         assertOnUi(() -> !panel.bid.isEnabled() && !panel.disconnect.isEnabled());
     }
 
+    @Test void selectedDiscoveredServerFillsConnectionFieldsAndConnects() throws Exception {
+        AtomicReference<GuiClient> ref = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            GuiClient panel = new GuiClient(); clients.add(panel); ref.set(panel);
+            panel.availableServers.addItem(new com.bidnet.network.ServerDiscovery.Server("127.0.0.1",server.getPort()));
+            assertEquals("127.0.0.1",panel.host.getText());
+            assertEquals(String.valueOf(server.getPort()),panel.port.getText());
+            panel.connect.doClick();
+        });
+        GuiClient panel = ref.get();
+        await(() -> panel.join.isEnabled());
+        assertOnUi(() -> !panel.findServers.isEnabled());
+        SwingUtilities.invokeAndWait(() -> panel.join.doClick());
+        await(() -> panel.bid.isEnabled());
+        SwingUtilities.invokeAndWait(panel::disconnect);
+        assertOnUi(() -> panel.findServers.isEnabled());
+    }
+
     private void assertOnUi(BooleanSupplier condition) throws Exception {
         SwingUtilities.invokeAndWait(() -> assertTrue(condition.getAsBoolean()));
     }

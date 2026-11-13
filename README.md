@@ -97,6 +97,32 @@ GUI, in a separate terminal:
 mvn compile exec:java "-Dexec.mainClass=com.bidnet.client.GuiClient" "-Dexec.args=127.0.0.1 5051"
 ```
 
+## Find a server on the same Wi-Fi
+
+Start the server normally. On a client computer using the updated GUI, click
+**Find servers**, wait about three seconds, select a result, then click
+**Connect** and **Join Auction** (`demo`). The selection fills the host and TCP
+port automatically, so users do not need to type an IP address.
+
+Discovery uses **UDP 5052**; auction traffic still uses the server's **TCP port
+(default 5051)**. The selected TCP port is read from the discovery reply, including
+when the server runs on a custom port. Both server and GUI must use this version.
+
+Allow UDP 5052 and the TCP server port through the server firewall on the demo
+network. Guest Wi-Fi/client isolation, VPN routing or blocked broadcasts may
+prevent discovery even when computers show the same Wi-Fi name. If no server is
+found, check the running server/network and use the manual host/port fields.
+Discovery does not bypass firewall or network isolation and is IPv4 LAN only.
+
+Run one discoverable server per computer: UDP 5052 is reserved by its discovery
+listener. If it is occupied, TCP startup still works and manual connection remains
+available. Discovery starts in the normal BidNetServer entry point; custom test
+launchers do not advertise automatically.
+
+The server selector stays hidden until a search finds more than one server. A
+single result fills the host/port automatically; click Connect to continue.
+The selector is hidden while searching and while connected.
+
 ## Ports and multiple computers
 
 Server, GUI and console client default to **5051**. If another program occupies
